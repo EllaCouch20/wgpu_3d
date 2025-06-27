@@ -1,5 +1,26 @@
 use cgmath::{InnerSpace, SquareMatrix};
 use winit::event::{VirtualKeyCode, ElementState, KeyboardInput, WindowEvent};
+use wgpu::{BindGroup, Buffer};
+
+pub struct Context {
+    pub camera: Camera,
+    pub controller: CameraController,
+    pub uniform: CameraUniform,
+    pub buffer: Buffer,
+    pub bind_group: BindGroup,
+}
+
+impl Context {
+    pub fn new(c: Camera, cc: CameraController, cu: CameraUniform, cb: Buffer, cbg: BindGroup) -> Self {
+        Context {
+            camera: c,
+            controller: cc,
+            uniform: cu,
+            buffer: cb,
+            bind_group: cbg,
+        }
+    }
+}
 
 pub(crate) struct Camera {
     pub eye: cgmath::Point3<f32>,
