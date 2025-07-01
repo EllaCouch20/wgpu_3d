@@ -1,6 +1,6 @@
 mod model;
 mod texture;
-mod canvas;
+mod world;
 pub mod window;
 mod camera;
 mod light;

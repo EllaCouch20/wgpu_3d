@@ -10,6 +10,7 @@ use crate::texture::Texture;
 
 use crate::model::Model;
 use crate::model::Material;
+use crate::model::Area3D;
 
 pub struct Context {
     pub device: Device,
@@ -83,7 +84,7 @@ impl Context {
         texture::Texture::from_bytes(&self.device, &self.queue, &data, file_name)
     }
 
-    pub async fn load_model(&mut self, file_name: &str) -> Result<(), anyhow::Error> {
+    pub async fn load_model(&mut self, file_name: &str, area: Area3D) -> Result<(), anyhow::Error> {
         let obj_text = Self::load_string(file_name).await?;
         let obj_cursor = Cursor::new(obj_text);
         let mut obj_reader = BufReader::new(obj_cursor);
@@ -108,7 +109,7 @@ impl Context {
             materials.push(material);
         }
 
-        let model = Model::new(self, models, materials, file_name.to_string());
+        let model = Model::new(self, area, models, materials, file_name.to_string());
         self.models.push(model);
 
         Ok(())

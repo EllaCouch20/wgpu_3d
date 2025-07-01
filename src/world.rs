@@ -29,8 +29,7 @@ use std::iter;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-
-pub struct State {
+pub struct World {
     ctx: CanvasContext,
     surface: Surface,
     pub size: winit::dpi::PhysicalSize<u32>,
@@ -38,13 +37,46 @@ pub struct State {
     depth_texture: texture::Texture,
     camera: CameraContext,
     instances: Vec<Instance>,
-    instance_buffer: Buffer,
+    instance_buffer: Option<Buffer>,
     light: LightContext,
 }
 
-impl State {
+impl World {
+    pub async fn add_model(&mut self, path: &str, area: Area3D) {
+        self.ctx.load_model(path, area).await;
+        self.update_instances();
+    }
+
+    pub fn update_instances(&mut self) {
+        let instances = self.ctx.models.iter().map(|m| {
+            println!("ADDING INSTANCE");
+            let Area3D(x, y, z) = m.area;
+            let position = cgmath::Vector3 { x, y, z };
+
+            let rotation = if position.is_zero() {
+                cgmath::Quaternion::from_axis_angle(
+                    cgmath::Vector3::unit_z(),
+                    cgmath::Deg(0.0),
+                )
+            } else {
+                cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+            };
+
+            Instance { position, rotation }
+        }).collect::<Vec<_>>();
+
+        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        // Create the instance buffer with our data
+        self.instance_buffer = Some(self.ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        }));
+
+        println!("BUFFER {:?}", self.instance_buffer);
+    }
     // Initialize the state
-    pub async fn new(window: &Window, items: Vec<(&str, Area3D)>) -> Self {
+    pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -122,29 +154,6 @@ impl State {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let instances = items.clone().into_iter().map(|(_, Area3D(x, y, z))| {
-            let position = cgmath::Vector3 { x, y, z };
-
-            let rotation = if position.is_zero() {
-                cgmath::Quaternion::from_axis_angle(
-                    cgmath::Vector3::unit_z(),
-                    cgmath::Deg(0.0),
-                )
-            } else {
-                cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-            };
-
-            Instance { position, rotation }
-        }).collect::<Vec<_>>();
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        // Create the instance buffer with our data
-        let instance_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
         let camera_bind_group_layout = ctx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -167,10 +176,6 @@ impl State {
             }],
             label: Some("camera_bind_group"),
         });
-
-        for (path, _) in items {
-            ctx.load_model(path).await;
-        }
 
         let light_uniform = LightUniform::new(Area3D(2.0, 2.0, 2.0), Color::new(1.0, 1.0, 1.0));
 
@@ -258,8 +263,8 @@ impl State {
             render_pipeline,
             depth_texture,
             camera: CameraContext::new(camera, camera_controller, camera_uniform, camera_buffer, camera_bind_group),
-            instances,
-            instance_buffer,
+            instances: Vec::new(),
+            instance_buffer: None,
             light: LightContext::new(light_uniform, light_buffer, light_bind_group, light_render_pipeline),
         }
     }
@@ -315,7 +320,6 @@ impl State {
                         store: true,
                     },
                 })],
-                // Create a depth stencil buffer using the depth texture
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_texture.view,
                     depth_ops: Some(wgpu::Operations {
@@ -326,16 +330,13 @@ impl State {
                 }),
             });
 
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_pipeline(&self.light.render_pipeline);
-
-            // add lighting to each moedel
-            self.ctx.models.iter().for_each(|m| m.light(&mut render_pass, &self.camera, &self.light));
-
-            render_pass.set_pipeline(&self.render_pipeline);
-
-            // draw each model
-            self.ctx.models.iter().for_each(|m| m.draw(&mut render_pass, &self.camera, &self.light));
+            if let Some(buffer) = &self.instance_buffer {
+                render_pass.set_vertex_buffer(1, buffer.slice(..));
+                render_pass.set_pipeline(&self.light.render_pipeline);
+                self.ctx.models.iter().for_each(|m| m.light(&mut render_pass, &self.camera, &self.light));
+                render_pass.set_pipeline(&self.render_pipeline);
+                self.ctx.models.iter().for_each(|m| m.draw(&mut render_pass, &self.camera, &self.light));
+            }
         }
 
         self.ctx.queue.submit(iter::once(encoder.finish()));

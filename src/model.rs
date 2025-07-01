@@ -121,15 +121,16 @@ impl Mesh {
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+    pub area: Area3D
 }
 
 impl Model {
-    pub fn new(ctx: &mut CanvasContext, models: Vec<tobj::Model>, materials: Vec<Material>, file_name: String) -> Self {
+    pub fn new(ctx: &mut CanvasContext, area: Area3D, models: Vec<tobj::Model>, materials: Vec<Material>, file_name: String) -> Self {
         let meshes = models.into_iter().map(|m| {
             Mesh::new(ctx, file_name.clone(), m)
         }).collect::<Vec<_>>();
 
-        Self { meshes, materials }
+        Self { meshes, materials, area }
     }
 
     pub fn draw<'a>(&'a self, render_pass: &mut RenderPass<'a>, camera: &'a CameraContext, light: &'a LightContext) {

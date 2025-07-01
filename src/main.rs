@@ -1,5 +1,5 @@
-use wgpu_3d::window::run;
+use wgpu_3d::window::App;
 
 fn main() {
-    pollster::block_on(run());
+    pollster::block_on(App::run());
 }
